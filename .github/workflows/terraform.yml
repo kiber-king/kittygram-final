@@ -1,0 +1,74 @@
+name: Terraform
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Select the Terraform action'
+        required: true
+        default: 'plan'
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+
+env:
+  TF_VAR_cloud_id: ${{ secrets.CLOUD_ID }}
+  TF_VAR_folder_id: ${{ secrets.FOLDER_ID }}
+  TF_VAR_ssh_key: ${{ secrets.SSH_OPEN }}
+  TF_VAR_aws_region: "ru-central1"
+  ACCESS_KEY: ${{ secrets.ACCESS_KEY }}
+  SECRET_KEY: ${{ secrets.SECRET_KEY }}
+
+jobs:
+  terraform:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v2
+      with:
+        terraform_version: 1.8.3
+
+    - name: Write service account key
+      working-directory: ./infra
+      run: |
+        cat > ./authorized_key.json << 'EOF'
+        ${{ secrets.YC_KEY_JSON }}
+        EOF
+
+    - name: Terraform init
+      working-directory: ./infra
+      run: terraform init -backend-config="access_key=$ACCESS_KEY" -backend-config="secret_key=$SECRET_KEY"
+
+    - name: Terraform plan
+      if: github.event.inputs.action == 'plan'
+      working-directory: ./infra
+      run: terraform plan
+
+    - name: Terraform apply
+      if: github.event.inputs.action == 'apply'
+      working-directory: ./infra
+      run: terraform apply -auto-approve
+
+    - name: Save VM IP
+      if: github.event.inputs.action == 'apply' && success()
+      working-directory: ./infra
+      run: |
+        terraform output -raw vm_1_public_ip | grep -oE '[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+' | head -1 > vm_ip.txt
+
+    - name: Upload artifact
+      if: github.event.inputs.action == 'apply' && success()
+      uses: actions/upload-artifact@v4
+      with:
+        name: vm-ip
+        path: infra/vm_ip.txt
+
+    - name: Terraform destroy
+      if: github.event.inputs.action == 'destroy'
+      working-directory: ./infra
+      run: terraform destroy -auto-approve

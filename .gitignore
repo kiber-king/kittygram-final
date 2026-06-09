@@ -1,0 +1,12 @@
+.DS_Store
+.env
+*.swp
+*.pyc
+__pycache__/
+*.egg-info/
+.pytest_cache/
+infra/authorized_key.json
+infra/terraform.tfvars
+infra/.terraform/
+infra/.terraform.lock.hcl
+_env.example
